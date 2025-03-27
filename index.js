@@ -18,11 +18,11 @@ console.log("Bot is running...");
 // Handle incoming messages
 bot.on('message', (msg) => {
     const chatId = msg.chat.id;
-    const phoneNumber = msg.text;
+    const input = msg.text.trim(); // Trim whitespace
 
     try {
-        // Parse the phone number
-        const parsedNumber = phoneUtil.parse(phoneNumber);
+        // Validate and parse the phone number
+        const parsedNumber = phoneUtil.parseAndKeepRawInput(input);
         const isValid = phoneUtil.isValidNumber(parsedNumber);
 
         if (!isValid) {
@@ -37,7 +37,7 @@ bot.on('message', (msg) => {
         // Send the result back to the user
         bot.sendMessage(chatId, `Phone number details:\nCountry: ${countryName}\nRegion Code: ${regionCode}`);
     } catch (error) {
-        bot.sendMessage(chatId, "An error occurred while processing the phone number. Please try again.");
-        console.error(error);
+        console.error("Error processing phone number:", error.message);
+        bot.sendMessage(chatId, "An error occurred while processing the phone number. Please ensure the number is valid and includes the country code (e.g., +1 650 253 0000).");
     }
 });
