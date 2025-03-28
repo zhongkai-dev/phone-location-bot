@@ -1,69 +1,106 @@
 const TelegramBot = require('node-telegram-bot-api');
 const phoneUtil = require('google-libphonenumber').PhoneNumberUtil.getInstance();
+const axios = require('axios');
+require('dotenv').config(); // Load environment variables
 
-// Replace with your Telegram Bot Token
+// Use environment variables for security
 const TELEGRAM_BOT_TOKEN = '8183902658:AAGaAqxYsm6N5PfQWhrgcyLA3gN1_MKrbjs';
+const VERIPHONE_API_KEY = '4C9FBDA3C44247929DBC907666F638BC';
 
-// Initialize the Telegram Bot
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
-
-// Function to get flag emoji based on country code
-function getFlagEmoji(countryCode) {
-    const codePoints = countryCode
-        .toUpperCase()
-        .split('')
-        .map(char => 127397 + char.charCodeAt());
-    return String.fromCodePoint(...codePoints);
+if (!TELEGRAM_BOT_TOKEN || !VERIPHONE_API_KEY) {
+    console.error("❌ Missing Telegram Bot Token or Veriphone API Key!");
+    process.exit(1);
 }
 
-// Function to parse phone number and return location details
-function getLocation(phoneNumber) {
-    try {
-        // Check if the phone number starts with a '+' to determine the presence of a country code
-        const defaultRegion = phoneNumber.startsWith('+') ? undefined : 'US';
-        const parsedNumber = phoneUtil.parse(phoneNumber, defaultRegion);
+// Create the Telegram bot
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 
-        if (!phoneUtil.isValidNumber(parsedNumber)) {
-            return 'Invalid phone number. Please ensure the number is valid and includes the country code (e.g., +1).';
+// Function to parse and format phone number details
+async function getPhoneDetails(phoneNumberString) {
+    try {
+        console.log("Received phone number:", phoneNumberString);
+
+        // Parse phone number
+        let phoneNumber;
+        if (phoneNumberString.startsWith('+')) {
+            phoneNumber = phoneUtil.parse(phoneNumberString);
+        } else {
+            phoneNumber = phoneUtil.parse(phoneNumberString, 'US');
         }
 
-        const country = phoneUtil.getRegionCodeForNumber(parsedNumber);
-        const countryCode = phoneUtil.getCountryCodeForRegion(country);
-        const nationalNumber = phoneUtil.format(parsedNumber, phoneUtil.PhoneNumberFormat.NATIONAL);
-        const internationalNumber = phoneUtil.format(parsedNumber, phoneUtil.PhoneNumberFormat.INTERNATIONAL);
+        if (!phoneUtil.isValidNumber(phoneNumber)) {
+            console.log("Invalid phone number:", phoneNumberString);
+            return `📞⚫<b>Phone Number:</b> ${phoneNumberString}\n❌ Invalid phone number.`;
+        }
 
-        // Get flag emoji
-        const flagEmoji = getFlagEmoji(country);
+        // Fetch details from Veriphone API
+        try {
+            const veriphoneResponse = await axios.get(
+                `https://api.veriphone.io/v2/verify?phone=${encodeURIComponent(phoneNumberString)}&key=${VERIPHONE_API_KEY}`
+            );
 
-        // Return formatted response
-        return `
-${flagEmoji} Country: ${country}
-📞 Country Code: +${countryCode}
-📱 National Number: ${nationalNumber}
-🌐 International Number: ${internationalNumber}
-        `;
+            const data = veriphoneResponse.data;
+
+            if (data.status === "success" && data.phone_valid) {
+                const country = data.country || "Unknown";
+                const countryCode = data.country_code || "Unknown";
+                const flagEmoji = String.fromCodePoint(...[...countryCode].map(c => 0x1F1E6 + c.toUpperCase().charCodeAt(0) - 65));
+
+                return `
+📞<b>Phone Number:</b> ${data.e164 || "N/A"}
+✅<b>Status:</b> Success
+🌍<b>Country:</b> ${country} ${flagEmoji}
+📍<b>Region:</b> ${data.phone_region || "N/A"}`;
+            } else {
+                return `📞⚫<b>Phone Number:</b> ${phoneNumberString}\n❌ Phone number validation failed.`;
+            }
+        } catch (apiError) {
+            if (apiError.response && apiError.response.status === 401) {
+                console.error("Unauthorized access to Veriphone API. Check your API key.");
+                return `📞⚫<b>Phone Number:</b> ${phoneNumberString}\n⚠️ Unauthorized access to Veriphone API. Please contact the bot administrator.`;
+            } else {
+                console.error("Error fetching details from Veriphone API:", apiError.message);
+                return `📞⚫<b>Phone Number:</b> ${phoneNumberString}\n⚠️ Error fetching additional details. Please try again later.`;
+            }
+        }
     } catch (error) {
-        console.error('Error parsing phone number:', error.message);
-        return 'An error occurred while processing the phone number. Please ensure the number is valid and includes the country code (e.g., +1 650 253 0000).';
+        console.error("Error parsing phone number:", error.message);
+        return `📞⚫<b>Phone Number:</b> ${phoneNumberString}\n❌ Error parsing phone number. Please check the format.`;
     }
 }
 
-// Listen for messages
-bot.on('message', (msg) => {
+// Handle incoming messages
+bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
-    const phoneNumber = msg.text;
+    const inputText = msg.text.trim();
 
-    // Ignore commands like /start
-    if (phoneNumber.startsWith('/')) {
-        bot.sendMessage(chatId, 'Welcome to the Phone Locator Bot! Send a phone number to get its location details.');
+    console.log("Processing message:", inputText);
+
+    if (inputText.startsWith('/')) {
+        bot.sendMessage(chatId, "👋 Welcome! Please send one or more phone numbers (separated by line breaks) to locate.", { parse_mode: 'HTML' });
         return;
     }
 
-    // Get location details
-    const response = getLocation(phoneNumber);
+    // Split the input text by line breaks to handle multiple phone numbers
+    const phoneNumbers = inputText.split('\n').map(num => num.trim()).filter(num => num.length > 0);
 
-    // Send response back to user
-    bot.sendMessage(chatId, response);
+    if (phoneNumbers.length === 0) {
+        bot.sendMessage(chatId, "⚠️ No valid phone numbers found. Please send one or more phone numbers separated by line breaks.", { parse_mode: 'HTML' });
+        return;
+    }
+
+    let responses = [];
+
+    for (const phoneNumber of phoneNumbers) {
+        const result = await getPhoneDetails(phoneNumber);
+        responses.push(result);
+    }
+
+    // Combine all responses into a single message
+    const fullResponse = responses.join("\n\n") + "\n<blockquote>🤖<b>Bot by <a href=\"https://t.me/zhongkai_me\">中凯</a></b></blockquote>";
+
+    // Send the aggregated response back to the user
+    bot.sendMessage(chatId, fullResponse, { parse_mode: 'HTML', disable_web_page_preview: true });
 });
 
-console.log('Bot is running...');
+console.log("✅ Telegram bot is running...");
