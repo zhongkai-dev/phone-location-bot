@@ -31,9 +31,22 @@ bot.on('message', (msg) => {
     const input = msg.text.trim(); // Trim whitespace
 
     try {
-        // Parse the phone number
-        const parsedNumber = phoneUtil.parseAndKeepRawInput(input);
+        console.log(`Processing input: "${input}"`);
+
+        // Attempt to parse the phone number
+        let parsedNumber;
+        try {
+            // Try parsing with default region 'US' for ambiguous inputs
+            parsedNumber = phoneUtil.parseAndKeepRawInput(input, 'US');
+        } catch (parseError) {
+            console.error("Error parsing phone number:", parseError.message);
+            bot.sendMessage(chatId, "Invalid phone number. Please ensure the number is valid and includes the country code (e.g., +1).");
+            return;
+        }
+
+        // Validate the parsed number
         const isValid = phoneUtil.isValidNumber(parsedNumber);
+        console.log("Is Valid:", isValid);
 
         if (!isValid) {
             bot.sendMessage(chatId, "Invalid phone number. Please provide a valid phone number.");
