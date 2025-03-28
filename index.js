@@ -1,78 +1,69 @@
-require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const phoneUtil = require('google-libphonenumber').PhoneNumberUtil.getInstance();
 
-// Load environment variables
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+// Replace with your Telegram Bot Token
+const TELEGRAM_BOT_TOKEN = '8183902658:AAGaAqxYsm6N5PfQWhrgcyLA3gN1_MKrbjs';
 
-if (!TELEGRAM_BOT_TOKEN) {
-    console.error("Telegram bot token is missing. Please set TELEGRAM_BOT_TOKEN in .env file.");
-    process.exit(1);
-}
-
-// Create a bot instance
+// Initialize the Telegram Bot
 const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 
-console.log("Bot is running...");
-
-// Helper function to get flag emoji
-function getFlagEmoji(regionCode) {
-    if (!regionCode) return '';
-    const codePoints = regionCode
+// Function to get flag emoji based on country code
+function getFlagEmoji(countryCode) {
+    const codePoints = countryCode
         .toUpperCase()
         .split('')
         .map(char => 127397 + char.charCodeAt());
     return String.fromCodePoint(...codePoints);
 }
 
-// Handle incoming messages
+// Function to parse phone number and return location details
+function getLocation(phoneNumber) {
+    try {
+        // Check if the phone number starts with a '+' to determine the presence of a country code
+        const defaultRegion = phoneNumber.startsWith('+') ? undefined : 'US';
+        const parsedNumber = phoneUtil.parse(phoneNumber, defaultRegion);
+
+        if (!phoneUtil.isValidNumber(parsedNumber)) {
+            return 'Invalid phone number. Please ensure the number is valid and includes the country code (e.g., +1).';
+        }
+
+        const country = phoneUtil.getRegionCodeForNumber(parsedNumber);
+        const countryCode = phoneUtil.getCountryCodeForRegion(country);
+        const nationalNumber = phoneUtil.format(parsedNumber, phoneUtil.PhoneNumberFormat.NATIONAL);
+        const internationalNumber = phoneUtil.format(parsedNumber, phoneUtil.PhoneNumberFormat.INTERNATIONAL);
+
+        // Get flag emoji
+        const flagEmoji = getFlagEmoji(country);
+
+        // Return formatted response
+        return `
+${flagEmoji} Country: ${country}
+📞 Country Code: +${countryCode}
+📱 National Number: ${nationalNumber}
+🌐 International Number: ${internationalNumber}
+        `;
+    } catch (error) {
+        console.error('Error parsing phone number:', error.message);
+        return 'An error occurred while processing the phone number. Please ensure the number is valid and includes the country code (e.g., +1 650 253 0000).';
+    }
+}
+
+// Listen for messages
 bot.on('message', (msg) => {
     const chatId = msg.chat.id;
-    const input = msg.text.trim(); // Trim whitespace
+    const phoneNumber = msg.text;
 
-    try {
-        console.log(`Processing input: "${input}"`);
-
-        // Attempt to parse the phone number
-        let parsedNumber;
-        try {
-            // Try parsing with default region 'US' for ambiguous inputs
-            parsedNumber = phoneUtil.parseAndKeepRawInput(input, 'US');
-        } catch (parseError) {
-            console.error("Error parsing phone number:", parseError.message);
-            bot.sendMessage(chatId, "Invalid phone number. Please ensure the number is valid and includes the country code (e.g., +1).");
-            return;
-        }
-
-        // Validate the parsed number
-        const isValid = phoneUtil.isValidNumber(parsedNumber);
-        console.log("Is Valid:", isValid);
-
-        if (!isValid) {
-            bot.sendMessage(chatId, "Invalid phone number. Please provide a valid phone number.");
-            return;
-        }
-
-        // Get detailed information
-        const regionCode = phoneUtil.getRegionCodeForNumber(parsedNumber);
-        const countryName = new Intl.DisplayNames(['en'], { type: 'region' }).of(regionCode);
-        const countryCode = phoneUtil.getCountryCodeForRegion(regionCode);
-        const flagEmoji = getFlagEmoji(regionCode);
-
-        // Format the phone number for display
-        const formattedNumber = phoneUtil.format(parsedNumber, phoneUtil.PhoneNumberFormat.INTERNATIONAL);
-
-        // Build the response
-        let response = `Phone number details:\n`;
-        response += `${flagEmoji} Country: ${countryName}\n`;
-        response += `📞 Region Code: ${regionCode}\n`;
-        response += `🌐 Country Code: +${countryCode}\n`;
-        response += `📱 Formatted Number: ${formattedNumber}`;
-
-        // Send the result back to the user
-        bot.sendMessage(chatId, response);
-    } catch (error) {
-        console.error("Error processing phone number:", error.message);
-        bot.sendMessage(chatId, "An error occurred while processing the phone number. Please ensure the number is valid and includes the country code (e.g., +1 650 253 0000).");
+    // Ignore commands like /start
+    if (phoneNumber.startsWith('/')) {
+        bot.sendMessage(chatId, 'Welcome to the Phone Locator Bot! Send a phone number to get its location details.');
+        return;
     }
+
+    // Get location details
+    const response = getLocation(phoneNumber);
+
+    // Send response back to user
+    bot.sendMessage(chatId, response);
 });
+
+console.log('Bot is running...');
