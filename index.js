@@ -97,7 +97,7 @@ bot.on('message', async (msg) => {
     }
 
     // Combine all responses into a single message
-    const fullResponse = responses.join("\n\n") + "\n<blockquote>🤖<b>Bot by <a href=\"https://t.me/zhongkai_me\">中凯</a></b></blockquote>";
+    const fullResponse = responses.join("\n\n") + "\n<blockquote>🤖<b>Bot by <a href=\"https://t.me/ZhongKai_KL\">中凯</a></b></blockquote>";
 
     // Send the aggregated response back to the user
     bot.sendMessage(chatId, fullResponse, { parse_mode: 'HTML', disable_web_page_preview: true });
