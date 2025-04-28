@@ -4,7 +4,7 @@ const axios = require('axios');
 require('dotenv').config(); // Load environment variables
 
 // Use environment variables for security
-const TELEGRAM_BOT_TOKEN = '8183902658:AAE0Kay_hpeeNw0QWTtwMDI96sRmPjMapLQ';
+const TELEGRAM_BOT_TOKEN = '7669568107:AAHUEKKyvbuIdSzXOGpxHqlyFbXKnf_9ql8';
 const VERIPHONE_API_KEY = '4C9FBDA3C44247929DBC907666F638BC';
 
 if (!TELEGRAM_BOT_TOKEN || !VERIPHONE_API_KEY) {
